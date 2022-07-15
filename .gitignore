@@ -1,0 +1,8 @@
+.idea
+*.pyc
+env
+.pytest_cache
+__pycache__
+.DS_Store
+.vscode
+pytest.ini
