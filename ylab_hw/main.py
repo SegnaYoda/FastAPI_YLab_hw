@@ -1,8 +1,10 @@
 import redis
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Security
+
 
 from src.api.v1.resources import posts
+from src.api.v1.resources import user_endpoints
 from src.core import config
 from src.db import cache, redis_cache
 
@@ -41,7 +43,7 @@ def shutdown():
 
 # Подключаем роутеры к серверу
 app.include_router(router=posts.router, prefix="/api/v1/posts")
-
+app.include_router(router=user_endpoints.user_router, prefix="/api/v1")
 
 if __name__ == "__main__":
     # Приложение может запускаться командой
