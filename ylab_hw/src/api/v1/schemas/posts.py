@@ -21,6 +21,7 @@ class PostCreate(PostBase):
 class PostModel(PostBase):
     id: int
     created_at: datetime
+    views: int
 
 
 class PostListResponse(BaseModel):

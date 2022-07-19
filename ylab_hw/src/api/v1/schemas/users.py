@@ -2,14 +2,21 @@ from datetime import datetime
 from sqlmodel import SQLModel, Field, Relationship
 from pydantic import BaseModel
 
+__all__ = (
+    "UserViewShort",
+    "UserView",
+    "UserInput",
+    "UserLogin",
+)
+
 
 class UserViewShort(SQLModel):
-    uuid: str
     username: str
     email: str
 
 
 class UserView(UserViewShort):
+    uuid: str
     created_at: datetime
     is_superuser: bool = False
 
@@ -17,8 +24,9 @@ class UserView(UserViewShort):
 class UserInput(SQLModel):
     username: str
     password: str = Field(max_length=256, min_length=6)
-    # password2: str
     email: str
+    
+    # password2: str
 
     # @validator('password2')
     # def password_match(cls, v, values, **kwargs):

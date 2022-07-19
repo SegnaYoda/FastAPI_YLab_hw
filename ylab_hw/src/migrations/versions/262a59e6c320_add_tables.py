@@ -1,8 +1,8 @@
-"""ADD Posts,  Users Tables
+"""ADD Tables
 
-Revision ID: 01dcec43f730
+Revision ID: 262a59e6c320
 Revises: 
-Create Date: 2022-07-17 17:18:19.714581
+Create Date: 2022-07-18 15:30:57.343302
 
 """
 from alembic import op
@@ -11,7 +11,7 @@ import sqlmodel
 
 
 # revision identifiers, used by Alembic.
-revision = '01dcec43f730'
+revision = '262a59e6c320'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -28,14 +28,15 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('user',
+    sa.Column('uuid', sa.String(), nullable=True),
     sa.Column('id', sa.Integer(), nullable=True),
-    sa.Column('uuid', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
     sa.Column('username', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('password', sqlmodel.sql.sqltypes.AutoString(length=256), nullable=False),
     sa.Column('email', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('is_superuser', sa.Boolean(), nullable=True),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('uuid')
     )
     op.create_index(op.f('ix_user_username'), 'user', ['username'], unique=False)
     # ### end Alembic commands ###

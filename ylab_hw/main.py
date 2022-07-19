@@ -29,16 +29,27 @@ def root():
 def startup():
     """Подключаемся к базам при старте сервера"""
     cache.cache = redis_cache.CacheRedis(
-        cache_instance=redis.Redis(
-            host=config.REDIS_HOST, port=config.REDIS_PORT, max_connections=10
+            cache_instance=redis.Redis(
+                host=config.REDIS_HOST, port=config.REDIS_PORT, db=0, max_connections=10
+            )
         )
+    cache.blocked_access_cache = redis_cache.CacheRedis(
+        redis.Redis(
+            host=config.REDIS_HOST, port=config.REDIS_PORT, db=1, decode_responses=True
+)
     )
-
+    cache.active_refresh_cache = redis_cache.CacheRedis(
+        redis.Redis(
+            host=config.REDIS_HOST, port=config.REDIS_PORT, db=2, decode_responses=True
+)
+    )
 
 @app.on_event("shutdown")
 def shutdown():
     """Отключаемся от баз при выключении сервера"""
     cache.cache.close()
+    cache.blocked_access_cache.close()
+    cache.active_refresh_cache.close()
 
 
 # Подключаем роутеры к серверу

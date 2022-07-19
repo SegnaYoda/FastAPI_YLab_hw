@@ -4,6 +4,8 @@ from typing import Optional, Union
 __all__ = (
     "AbstractCache",
     "get_cache",
+    "get_blocked_access_tkn",
+    "get_active_refresh_tkn",
 )
 
 from src.core import config
@@ -27,13 +29,28 @@ class AbstractCache(ABC):
         pass
 
     @abstractmethod
+    def delete(
+        self,
+        key: str,
+    ):
+        pass
+
+    @abstractmethod
     def close(self):
         pass
 
 
 cache: Optional[AbstractCache] = None
+blocked_access_cache: Optional[AbstractCache] = None
+active_refresh_cache: Optional[AbstractCache] = None
 
 
 # Функция понадобится при внедрении зависимостей
 def get_cache() -> AbstractCache:
     return cache
+
+def get_blocked_access_tkn() -> AbstractCache:
+    return blocked_access_cache
+
+def get_active_refresh_tkn() -> AbstractCache:
+    return active_refresh_cache
