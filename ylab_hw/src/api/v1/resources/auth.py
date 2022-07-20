@@ -1,25 +1,34 @@
 import datetime
-from fastapi import Security, HTTPException
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from passlib.context import CryptContext
-import jwt
-from starlette import status
 import uuid
+
+from fastapi import HTTPException, Security
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
+import jwt
+
+from passlib.context import CryptContext
+
+from starlette import status
 
 
 class AuthHandler:
+    """Класс обработчик и генерации токенов."""
+
     security = HTTPBearer()
     pwd_context = CryptContext(schemes=['bcrypt'])
     secret = 'supersecret_ylab_homework'
 
     def get_password_hash(self, password):
+        """Получить хещированный пароль."""
         return self.pwd_context.hash(password)
 
     def verify_password(self, pwd, hashed_pwd):
+        """Верифицировать пароль."""
         return self.pwd_context.verify(pwd, hashed_pwd)
 
     def encode_token(self, type_token, username, email, is_super,
-                            user_uuid, hours, rfrsh_uuid, jti_token):
+                     user_uuid, hours, rfrsh_uuid, jti_token):
+        """Сгенирировать токен."""
         payload = {
             'iat': datetime.datetime.utcnow(),
             'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=hours),
@@ -34,18 +43,20 @@ class AuthHandler:
         return jwt.encode(payload, self.secret, algorithm='HS256')
 
     def decode_token(self, token):
+        """Декодировать токен."""
         try:
             payload = jwt.decode(token, self.secret, algorithms=['HS256'])
-            return payload # dict
+            return payload  # dict
         except jwt.ExpiredSignatureError:
             raise HTTPException(status_code=401, detail='Expired signature')
-        except jwt.InvalidTokenError or KeyError:
+        except jwt.InvalidTokenError:
             raise HTTPException(status_code=401, detail='Invalid token')
-        
-    def auth_wrapper(self, auth: HTTPAuthorizationCredentials = Security(security)):
-        return self.decode_token(auth.credentials)
 
     def auth_current_user_uuid(self, auth: HTTPAuthorizationCredentials = Security(security)):
+        """Передает информацию о токене после декодирования.
+
+        Возвращает в кортеже информацию о токене и сам токен.
+        """
         credentials_exception = HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail='Could not validate credentials.'
@@ -55,7 +66,7 @@ class AuthHandler:
         if payload is None:
             raise credentials_exception
         return (payload, token)
-    
+
     def get_a_uuid(self):
         """Выдача uuid."""
         return str(uuid.uuid4())

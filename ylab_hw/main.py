@@ -1,12 +1,13 @@
+from fastapi import FastAPI
+
 import redis
-import uvicorn
-from fastapi import FastAPI, HTTPException, Security
 
-
-from src.api.v1.resources import posts
-from src.api.v1.resources import user_endpoints
+from src.api.v1.resources import posts, user_endpoints
 from src.core import config
 from src.db import cache, redis_cache
+
+import uvicorn
+
 
 app = FastAPI(
     # Конфигурируем название проекта. Оно будет отображаться в документации
@@ -29,20 +30,21 @@ def root():
 def startup():
     """Подключаемся к базам при старте сервера"""
     cache.cache = redis_cache.CacheRedis(
-            cache_instance=redis.Redis(
-                host=config.REDIS_HOST, port=config.REDIS_PORT, db=0, max_connections=10
-            )
+        cache_instance=redis.Redis(
+            host=config.REDIS_HOST, port=config.REDIS_PORT, db=0, max_connections=10
         )
+    )
     cache.blocked_access_cache = redis_cache.CacheRedis(
         redis.Redis(
             host=config.REDIS_HOST, port=config.REDIS_PORT, db=1, decode_responses=True
-)
+        )
     )
     cache.active_refresh_cache = redis_cache.CacheRedis(
         redis.Redis(
             host=config.REDIS_HOST, port=config.REDIS_PORT, db=2, decode_responses=True
-)
+        )
     )
+
 
 @app.on_event("shutdown")
 def shutdown():

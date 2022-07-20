@@ -1,5 +1,5 @@
 from typing import NoReturn, Optional, Union
-import redis
+
 from src.core import config
 from src.db import AbstractCache
 

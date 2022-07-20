@@ -1,8 +1,11 @@
 import json
 from functools import lru_cache
 from typing import Optional
+
 from fastapi import Depends
+
 from sqlmodel import Session
+
 from src.api.v1.schemas import PostCreate, PostModel
 from src.db import AbstractCache, get_cache, get_session
 from src.models import Post
@@ -11,7 +14,9 @@ from src.services import PostServiceMixin
 
 __all__ = ("PostService", "get_post_service")
 
+
 class PostService(PostServiceMixin):
+    """Обработчик запросов по разделу Post."""
 
     def get_post_list(self) -> dict:
         """Получить список постов."""
@@ -63,5 +68,5 @@ class PostService(PostServiceMixin):
 def get_post_service(
     cache: AbstractCache = Depends(get_cache),
     session: Session = Depends(get_session),
-) -> PostService :
-    return PostService(cache=cache, session=session,)
+) -> PostService:
+    return PostService(cache=cache, session=session)

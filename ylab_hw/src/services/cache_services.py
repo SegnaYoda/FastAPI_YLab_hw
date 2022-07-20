@@ -1,13 +1,17 @@
-import json
-from src.services.mixins import CacheServiceMixin
 import datetime
-from src.db import AbstractCache, get_cache, get_blocked_access_tkn, get_active_refresh_tkn
-from fastapi import Depends
+import json
 from functools import lru_cache
+
+from fastapi import Depends
+
+from src.db import AbstractCache, get_active_refresh_tkn, get_blocked_access_tkn, get_cache
+from src.services.mixins import CacheServiceMixin
 
 
 class CacheRedisService(CacheServiceMixin):
     """Обработчик для запросов в Redis."""
+
+    hours_refresh_tkn = 1
 
     def get_user_from_cache_db0(self, user_uuid):
         """Получить из основной redis пользователя по uuid."""
@@ -25,9 +29,9 @@ class CacheRedisService(CacheServiceMixin):
             self.cache.delete(key=f"{user_uuid}")
             return True
 
-    def add_access_token_to_cache(self, jti_token, access_token, hours_access_tkn):
+    def add_access_token_to_cache(self, id_token, token, hours_exp_tkn):
         """Добавить access token в основной кеш."""
-        self.cache.set(key=f"{jti_token}", value=f"{access_token}", expire=(3600 * hours_access_tkn))
+        self.cache.set(key=f"{id_token}", value=f"{token}", expire=(3600 * hours_exp_tkn))
         return True
 
     def delete_access_tkn_permission(self, payload_info):
@@ -45,25 +49,32 @@ class CacheRedisService(CacheServiceMixin):
 
     def cache_active_refresh_tkn_list(self, user_uuid, refresh_token, hours_refresh_tkn):
         """Добавить refresh token к списку разрешенных refresh токенов пользователя."""
+        self.hours_refresh_tkn = hours_refresh_tkn
         if list_tkn := self.active_refresh_tkn.get(key=f"{user_uuid}"):
             list_tkn = json.loads(list_tkn)
-            list_tkn.append(str(refresh_token))
-            self.active_refresh_tkn.set(key=f"{user_uuid}", value=json.dumps(list_tkn), expire=(3600 * hours_refresh_tkn))
+            list_tkn.append(refresh_token)
+            self.active_refresh_tkn.set(key=f"{user_uuid}",
+                                        value=json.dumps(list_tkn), expire=(3600 * hours_refresh_tkn))
             return True
         else:
             list_tkn = []
-            list_tkn.append(str(refresh_token))
-            self.active_refresh_tkn.set(key=f"{user_uuid}", value=json.dumps(list_tkn), expire=(3600 * hours_refresh_tkn))
+            list_tkn.append(refresh_token)
+            self.active_refresh_tkn.set(key=f"{user_uuid}", value=json.dumps(list_tkn),
+                                        expire=(3600 * hours_refresh_tkn))
             return True
 
-    def delete_refresh_tkn_from_list(self, user_uuid, hours_refresh_tkn, oldtoken):
+    def delete_refresh_tkn_from_list(self, user_uuid, oldtoken, rfi=False):
         """Удалить конкретный refresh_токен из разершенных в списке пользователя."""
+        hours_refresh_tkn = self.hours_refresh_tkn
         if list_tkn := self.active_refresh_tkn.get(key=f"{user_uuid}"):
             list_tkn = json.loads(list_tkn)
-            if str(oldtoken) in list_tkn:
-                list_tkn.remove(str(oldtoken))
-                self.active_refresh_tkn.set(key=f"{user_uuid}", value=json.dumps(list_tkn), expire=(3600 * hours_refresh_tkn))
-                return True
+            if oldtoken in list_tkn:
+                list_tkn.remove(oldtoken)
+                self.active_refresh_tkn.set(key=f"{user_uuid}", value=json.dumps(list_tkn),
+                                            expire=(3600 * hours_refresh_tkn))
+        if rfi:
+            self.cache.delete(key=f"{rfi}")
+        return True
 
     def delete_all_refresh_tkn(self, user_uuid):
         """Удалить все активные refresh_token для определенного пользователя."""
@@ -71,9 +82,14 @@ class CacheRedisService(CacheServiceMixin):
             self.active_refresh_tkn.delete(key=f"{user_uuid}")
             return True
 
-    def check_access_tkn_in_cache(self, jti_token):
+    def check_access_tkn_in_cache(self, id_token):
         """Проверить наличие access токена в базе данных."""
-        if self.cache.get(key=f"{jti_token}"):
+        if token := self.cache.get(key=f"{id_token}"):
+            return token
+
+    def check_access_tkn_in_blacklist(self, jti_token):
+        """Проверить наличие access токена в blacklist."""
+        if self.blocked_access_tkn.get(key=f"{jti_token}"):
             return True
 
     def check_refresh_tkn_in_cache(self, user_uuid, token):

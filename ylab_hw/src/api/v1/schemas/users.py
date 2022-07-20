@@ -1,6 +1,8 @@
 from datetime import datetime
-from sqlmodel import SQLModel, Field, Relationship
+
+from sqlmodel import Field
 from pydantic import BaseModel
+
 
 __all__ = (
     "UserViewShort",
@@ -10,7 +12,7 @@ __all__ = (
 )
 
 
-class UserViewShort(SQLModel):
+class UserViewShort(BaseModel):
     username: str
     email: str
 
@@ -21,11 +23,11 @@ class UserView(UserViewShort):
     is_superuser: bool = False
 
 
-class UserInput(SQLModel):
+class UserInput(BaseModel):
+    """Валидация для повторного ввода пароля по умолчанию не включена."""
     username: str
     password: str = Field(max_length=256, min_length=6)
     email: str
-    
     # password2: str
 
     # @validator('password2')
@@ -35,6 +37,6 @@ class UserInput(SQLModel):
     #     return v
 
 
-class UserLogin(SQLModel):
+class UserLogin(BaseModel):
     username: str
     password: str

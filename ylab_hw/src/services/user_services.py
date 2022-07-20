@@ -1,25 +1,28 @@
 import json
-from http import HTTPStatus
-from sqlmodel import Session
 from functools import lru_cache
-from src.models.users import User
-from src.services.mixins import CacheServiceMixin, UserServiceMixin
-from src.db import get_session
-from fastapi import HTTPException, Depends
-from src.services.cache_services import CacheRedisService, get_cache_service
-from src.api.v1.schemas.users import UserInput, UserLogin
-from src.models.users import User
+from http import HTTPStatus
+
+from fastapi import Depends, HTTPException
+
+from sqlmodel import Session
+
 from src.api.v1.resources.auth import AuthHandler
-import datetime
+from src.api.v1.schemas.users import UserInput, UserLogin
+from src.db import get_session
+from src.models.users import User
+from src.services.cache_services import CacheRedisService, get_cache_service
+from src.services.mixins import CacheServiceMixin, UserServiceMixin
 
 
 __all__ = ("UserService", "get_user_service")
 
 
 class UserService(UserServiceMixin):
-    """Обработчик запросов по разделу пользователь."""
+    """Обработчик запросов по разделу Пользователь."""
 
     auth_handler = AuthHandler()
+    hours_access_tkn = 1    # время жизни access токена
+    hours_refresh_tkn = 48   # время жизни refresh токена
 
     def __init__(self, session: Session, cache_service: CacheRedisService):
         super().__init__(session)
@@ -54,7 +57,7 @@ class UserService(UserServiceMixin):
         if not verified:
             raise HTTPException(status_code=HTTPStatus.UNAUTHORIZED, detail='Invalid username and/or password')
         # генерируем access_token refresh_token, где новые токены добавятся в redis
-        access_token, refresh_token = self.generate_token(user)
+        access_token, refresh_token = self.generate_token(user=user)
         return {'access_token': access_token, "refresh_token": refresh_token}
 
     def refresh_token(self, payload_info):
@@ -62,25 +65,28 @@ class UserService(UserServiceMixin):
         payload = payload_info[0]
         token = payload_info[1]
         credentials_exception = HTTPException(status_code=HTTPStatus.UNAUTHORIZED, detail="Could not validate.")
-        if payload["rfi"]:
+        if payload["type"] == "refresh":
             if cached_user := self.cache_service.get_user_from_cache_db0(payload["user_uuid"]):
                 user_found = json.loads(cached_user)
             else:
                 user_found = self.session.query(User).filter(User.uuid == payload["user_uuid"]).first()
                 user_found = user_found.dict()
             # генерируем access_token refresh_token, где новые токены добавятся в redis
-            access_token, refresh_token = self.generate_token(user_found, token)
+            access_token, refresh_token = self.generate_token(user=user_found, old_refresh_tkn=token)
             return {'access_token': access_token, "refresh_token": refresh_token}
         raise credentials_exception
 
     def check_access_tkn(self, jti_token):
+        """Проверить и вернуть при наличии access токен из основного кеша."""
         if self.cache_service.check_access_tkn_in_cache(jti_token):
             return True
 
     def check_refresh_tkn(self, payload_info):
+        """Проверить наличие refresh токен в списке разрешенных."""
         user_uuid = payload_info[0]['user_uuid']
         token = payload_info[1]
-        return self.cache_service.check_refresh_tkn_in_cache(user_uuid, token)
+        if self.cache_service.check_refresh_tkn_in_cache(user_uuid, token):
+            return True
 
     def get_current_user(self, user_uuid):
         """Получить пользователя по uuid."""
@@ -104,16 +110,18 @@ class UserService(UserServiceMixin):
         self.session.commit()
         self.session.refresh(patch_user)
         self.cache_service.set_user_to_cache_db0(patch_user)
-        self.cache_service.delete_access_tkn_permission(payload_info)
+        # self.cache_service.delete_access_tkn_permission(payload_info)
         access_token, refresh_token = self.generate_token(patch_user.dict(), rfrsh_uuid=old_rfrsh_uuid)
         return patch_user, access_token if patch_user else None
 
-    def delete_current_user(self, user_uuid):
+    def delete_current_user(self, user_uuid, payload_info):
         """Удалить пользователя."""
         user = self.session.query(User).filter(User.uuid == user_uuid).first()
         self.cache_service.delete_user_from_cache_db0(user_uuid)
         self.session.delete(user)
         self.session.commit()
+        self.cache_service.delete_access_tkn_permission(payload_info)
+        self.cache_service.delete_all_refresh_tkn(user_uuid)
         return "msg: user deleted" if user else None
 
     def select_all_users(self):
@@ -135,8 +143,8 @@ class UserService(UserServiceMixin):
         username = user["username"]
         email = user["email"]
         is_super = user["is_superuser"]
-        hours_access_tkn = 1    # время access токена
-        hours_refresh_tkn = 48   # время refresh токена
+        hours_access_tkn = self.hours_access_tkn    # время access токена
+        hours_refresh_tkn = self.hours_refresh_tkn   # время refresh токена
         access_token = self.auth_handler.encode_token(type_token="access", username=username, email=email,
                                                       is_super=is_super, user_uuid=user_uuid, hours=hours_access_tkn,
                                                       rfrsh_uuid=rfrsh_uuid, jti_token=jti_token)
@@ -144,11 +152,11 @@ class UserService(UserServiceMixin):
                                                        is_super=is_super, user_uuid=user_uuid, hours=hours_refresh_tkn,
                                                        rfrsh_uuid=rfrsh_uuid, jti_token=jti_token)
         self.cache_service.add_access_token_to_cache(jti_token, access_token, hours_access_tkn)
+        self.cache_service.add_access_token_to_cache(rfrsh_uuid, refresh_token, hours_refresh_tkn)
         self.cache_service.cache_active_refresh_tkn_list(user_uuid, refresh_token, hours_refresh_tkn)
         # Удаление старых токенов и перенос в блеклист при необходимости
         if old_refresh_tkn:
-            self.cache_service.delete_refresh_tkn_from_list(user_uuid=user_uuid, hours_refresh_tkn=hours_refresh_tkn,
-                                                            oldtoken=old_refresh_tkn)
+            self.cache_service.delete_refresh_tkn_from_list(user_uuid=user_uuid, oldtoken=old_refresh_tkn)
             if payload_rfrsh_tkn := self.auth_handler.decode_token(old_refresh_tkn):
                 if old_access_tkn := self.cache_service.check_access_tkn_in_cache(payload_rfrsh_tkn["jti"]):
                     payload_access_tkn = self.auth_handler.decode_token(old_access_tkn)
@@ -157,18 +165,17 @@ class UserService(UserServiceMixin):
         return access_token, refresh_token
 
     def logout(self, payload_info):
+        """Метод выхода из аккаунта."""
         user_uuid = payload_info[0]["user_uuid"]
-        oldtoken = payload_info[1]
-        expired_refresh_tkn = payload_info[0]["exp"]
-        hours_refresh_tkn = datetime.datetime.fromtimestamp(int(expired_refresh_tkn))
-        hours_refresh_tkn = hours_refresh_tkn - datetime.datetime.utcnow()
+        rfi = payload_info[0]["rfi"]
         self.cache_service.delete_access_tkn_permission(payload_info)
-        
-        self.cache_service.delete_refresh_tkn_from_list(user_uuid, hours_refresh_tkn, oldtoken)
-        
+        old_refresh_tkn = self.cache_service.check_access_tkn_in_cache(rfi)
+        self.cache_service.delete_refresh_tkn_from_list(
+            user_uuid=user_uuid, oldtoken=old_refresh_tkn.decode("utf-8"), rfi=rfi)
         return True
-        
+
     def logout_all(self, payload_info):
+        """Метод Выйти со всех устройств."""
         user_uuid = payload_info[0]["user_uuid"]
         self.cache_service.delete_all_refresh_tkn(user_uuid)
         return True
