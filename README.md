@@ -43,12 +43,12 @@ ____________________
 `{"username": "test_username", "password": "test_password"}`
 
 Авторизованный пользователь может:
-- получить новый access_token. `POST api/v1/refresh` 
+- Получить новый access_token. `POST api/v1/refresh` 
 - Просмотреть список пользователей. `GET api/v1/users`
 - Просмотреть свой профиль. `GET api/v1/users/me`
 - Изменить свои личные данные — email, username и др. И получить новый access_token. `PATCH  api/v1/users/me`
 `{"username": "new_test_username", "email": "new_email@mail.ru"}`
-- удалить пользователя. `DELETE api/v1/users/me` 
+- Удалить пользователя. `DELETE api/v1/users/me` 
 
 Выполнено задание со звездочкой:
 - Данные валидируются через schema при регистрациb и обновлениях данных пользователя.
